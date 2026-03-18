@@ -1,25 +1,48 @@
-name: prevent_data_exfiltration
-description: Block messaging and web requests after sensitive data (credentials, PII) has been accessed
-status: ACTIVE
-enforcement_points:
-  - PRE_CALL
-applies_to:
-  - send_message
-  - web_fetch
-  - web_search
+metadata:
+  id: data_exfiltration
+  name: data_exfiltration
+  description: Block messaging and web requests after sensitive data has been accessed
+  version: 1
+  created_at: "2026-03-17T00:00:00+00:00"
+  updated_at: "2026-03-17T00:00:00+00:00"
+  created_by: nanobot
+  source_guidance: null
+  status: active
+  enforcement_points:
+    - pre_call
+  priority: 10
+  tags:
+    - data_protection
+  applicable_tools:
+    - send_message
+    - web_fetch
+    - web_search
+  applicable_tags:
+    - credentials
+    - secrets
+    - pii
 
-rules:
-  - name: allow_audit_sessions
-    condition: "ctx.session.purpose_tags.any_of(['audit', 'trusted', 'reporting'])"
-    verdict: ALLOW
+dsl: |
+  policy "data_exfiltration" {
+    description: "Block messaging and web requests after sensitive data has been accessed"
+    enforcement: [PRE_CALL]
+    applies_to: ["send_message", "web_fetch", "web_search"]
+  }
+
+  rule "allow_audit_sessions" {
+    ctx.session.purpose_tags.any_of(["audit", "trusted", "reporting"])
+    => ALLOW
     reason: "Audit and trusted sessions may send messages after sensitive data access"
+  }
 
-  - name: deny_messaging_after_credentials
-    condition: "ctx.session.tags.any_of(['credentials', 'secrets'])"
-    verdict: DENY
+  rule "deny_messaging_after_credentials" {
+    ctx.session.tags.any_of(["credentials", "secrets"])
+    => DENY
     reason: "Cannot send messages or make web requests after accessing credentials or secrets"
+  }
 
-  - name: deny_messaging_after_pii
-    condition: "ctx.session.tags.any_of(['pii'])"
-    verdict: DENY
+  rule "deny_messaging_after_pii" {
+    ctx.session.tags.any_of(["pii"])
+    => DENY
     reason: "Cannot send messages or make web requests after accessing PII"
+  }

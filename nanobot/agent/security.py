@@ -46,7 +46,7 @@ class AegisEnforcer:
 
     def __init__(self, config: AegisConfig):
         from aegis import AegisClient
-        from aegis.config import AegisConfig as _AegisConfig
+        from aegis.config import AegisConfig as _AegisConfig, AuditConfig
 
         policy_dir = os.path.expanduser(config.policy_directory)
         # Default tag_rules_file to ~/.nanobot/aegis/tag_rules.yaml if not set
@@ -56,12 +56,13 @@ class AegisEnforcer:
 
         init_aegis_defaults(policy_dir, tag_rules)
 
+        audit_log = os.path.expanduser(config.audit_log) if config.audit_log else None
         aegis_cfg = _AegisConfig(
             policy_directory=policy_dir,
             tag_rules_file=tag_rules,
             memory_store_type="file",
             memory_directory=os.path.expanduser(config.memory_directory),
-            audit={"enabled": bool(config.audit_log), "log_file": os.path.expanduser(config.audit_log or "")},
+            audit=AuditConfig(enabled=bool(audit_log), log_file=audit_log),
         )
         self.client = AegisClient(aegis_cfg)
         self.default_purpose = config.default_purpose
@@ -107,6 +108,13 @@ class AegisEnforcer:
         try:
             sid = self.get_or_create_session(session_key)
             post = self.client.check_post_execution(sid, tool_name, args, result)
+
+            # Persist tags resolved at post-execution (from static rules + result patterns)
+            # into the session's accumulated_tags so future pre-call checks can see them.
+            resolved_tags = list(post.context_snapshot.get("current_tags", []))
+            if resolved_tags:
+                self.client.record_result(sid, tool_name, result, result_tags=resolved_tags)
+
             if post.final_verdict == Verdict.DENY:
                 reason = post.blocking_reason or "Policy violation"
                 logger.warning("Aegis blocked post-exec for {}: {}", tool_name, reason)
