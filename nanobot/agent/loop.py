@@ -30,7 +30,7 @@ from nanobot.providers.base import LLMProvider
 from nanobot.session.manager import Session, SessionManager
 
 if TYPE_CHECKING:
-    from nanobot.config.schema import ChannelsConfig, ExecToolConfig, WebSearchConfig
+    from nanobot.config.schema import AegisConfig, ChannelsConfig, ExecToolConfig, WebSearchConfig
     from nanobot.cron.service import CronService
 
 
@@ -64,6 +64,7 @@ class AgentLoop:
         session_manager: SessionManager | None = None,
         mcp_servers: dict | None = None,
         channels_config: ChannelsConfig | None = None,
+        aegis_config: AegisConfig | None = None,
     ):
         from nanobot.config.schema import ExecToolConfig, WebSearchConfig
 
@@ -93,6 +94,12 @@ class AgentLoop:
             exec_config=self.exec_config,
             restrict_to_workspace=restrict_to_workspace,
         )
+
+        if aegis_config and aegis_config.enabled:
+            from nanobot.agent.security import AegisEnforcer
+            self._aegis: AegisEnforcer | None = AegisEnforcer(aegis_config)
+        else:
+            self._aegis = None
 
         self._running = False
         self._mcp_servers = mcp_servers or {}
@@ -377,6 +384,9 @@ class AgentLoop:
                 current_message=msg.content, channel=channel, chat_id=chat_id,
                 current_role=current_role,
             )
+            if self._aegis:
+                self.tools._pre_call_hook = lambda n, p: self._aegis.check_pre_call(key, n, p)
+                self.tools._post_exec_hook = lambda n, p, r: self._aegis.record_and_check_post(key, n, p, r)
             final_content, _, all_msgs = await self._run_agent_loop(messages)
             self._save_turn(session, all_msgs, 1 + len(history))
             self.sessions.save(session)
@@ -400,6 +410,9 @@ class AgentLoop:
 
             if snapshot:
                 self._schedule_background(self.memory_consolidator.archive_messages(snapshot))
+
+            if self._aegis:
+                self._aegis.end_session(key)
 
             return OutboundMessage(channel=msg.channel, chat_id=msg.chat_id,
                                   content="New session started.")
@@ -436,6 +449,10 @@ class AgentLoop:
             await self.bus.publish_outbound(OutboundMessage(
                 channel=msg.channel, chat_id=msg.chat_id, content=content, metadata=meta,
             ))
+
+        if self._aegis:
+            self.tools._pre_call_hook = lambda n, p: self._aegis.check_pre_call(key, n, p)
+            self.tools._post_exec_hook = lambda n, p, r: self._aegis.record_and_check_post(key, n, p, r)
 
         final_content, _, all_msgs = await self._run_agent_loop(
             initial_messages, on_progress=on_progress or _bus_progress,
