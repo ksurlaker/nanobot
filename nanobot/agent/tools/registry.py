@@ -1,6 +1,6 @@
 """Tool registry for dynamic tool management."""
 
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from nanobot.agent.tools.base import Tool
 
@@ -14,6 +14,8 @@ class ToolRegistry:
 
     def __init__(self):
         self._tools: dict[str, Tool] = {}
+        self._pre_call_hook: Callable[[str, dict], Awaitable[str | None]] | None = None
+        self._post_exec_hook: Callable[[str, dict, str], Awaitable[str]] | None = None
 
     def register(self, tool: Tool) -> None:
         """Register a tool."""
@@ -46,12 +48,23 @@ class ToolRegistry:
         try:
             # Attempt to cast parameters to match schema types
             params = tool.cast_params(params)
-            
+
             # Validate parameters
             errors = tool.validate_params(params)
             if errors:
                 return f"Error: Invalid parameters for tool '{name}': " + "; ".join(errors) + _HINT
+
+            # Aegis pre-call enforcement
+            if self._pre_call_hook:
+                if denial := await self._pre_call_hook(name, params):
+                    return denial
+
             result = await tool.execute(**params)
+
+            # Aegis post-execution enforcement
+            if self._post_exec_hook:
+                result = await self._post_exec_hook(name, params, result)
+
             if isinstance(result, str) and result.startswith("Error"):
                 return result + _HINT
             return result
