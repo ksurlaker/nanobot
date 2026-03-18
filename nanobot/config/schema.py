@@ -150,6 +150,17 @@ class ToolsConfig(Base):
     mcp_servers: dict[str, MCPServerConfig] = Field(default_factory=dict)
 
 
+class AegisConfig(Base):
+    """Aegis policy enforcement configuration."""
+
+    enabled: bool = False
+    policy_directory: str = "~/.nanobot/aegis/policies"
+    tag_rules_file: str | None = None
+    memory_directory: str = "~/.nanobot/aegis/memory"
+    audit_log: str | None = "~/.nanobot/aegis/audit.jsonl"
+    default_purpose: str | None = None  # Declared purpose for all agent sessions
+
+
 class Config(BaseSettings):
     """Root configuration for nanobot."""
 
@@ -158,6 +169,7 @@ class Config(BaseSettings):
     providers: ProvidersConfig = Field(default_factory=ProvidersConfig)
     gateway: GatewayConfig = Field(default_factory=GatewayConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
+    aegis: AegisConfig = Field(default_factory=AegisConfig)
 
     @property
     def workspace_path(self) -> Path:
