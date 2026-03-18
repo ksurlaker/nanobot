@@ -1,0 +1,25 @@
+name: prevent_data_exfiltration
+description: Block messaging and web requests after sensitive data (credentials, PII) has been accessed
+status: ACTIVE
+enforcement_points:
+  - PRE_CALL
+applies_to:
+  - send_message
+  - web_fetch
+  - web_search
+
+rules:
+  - name: allow_audit_sessions
+    condition: "ctx.session.purpose_tags.any_of(['audit', 'trusted', 'reporting'])"
+    verdict: ALLOW
+    reason: "Audit and trusted sessions may send messages after sensitive data access"
+
+  - name: deny_messaging_after_credentials
+    condition: "ctx.session.tags.any_of(['credentials', 'secrets'])"
+    verdict: DENY
+    reason: "Cannot send messages or make web requests after accessing credentials or secrets"
+
+  - name: deny_messaging_after_pii
+    condition: "ctx.session.tags.any_of(['pii'])"
+    verdict: DENY
+    reason: "Cannot send messages or make web requests after accessing PII"

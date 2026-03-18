@@ -1,6 +1,8 @@
 """Aegis policy enforcement for nanobot tool calls."""
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -9,18 +11,54 @@ if TYPE_CHECKING:
     from nanobot.config.schema import AegisConfig
 
 
+def init_aegis_defaults(policy_directory: str, tag_rules_file: str | None) -> None:
+    """Seed bundled default policies and tag rules into the aegis config dirs if absent."""
+    from importlib.resources import files as pkg_files
+
+    policy_dir = Path(policy_directory)
+    policy_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        bundled_policies = pkg_files("nanobot") / "aegis" / "policies"
+        for item in bundled_policies.iterdir():
+            if item.name.endswith(".yaml"):
+                dest = policy_dir / item.name
+                if not dest.exists():
+                    dest.write_text(item.read_text(encoding="utf-8"), encoding="utf-8")
+                    logger.debug("Aegis: seeded default policy {}", item.name)
+    except Exception as e:
+        logger.debug("Aegis: could not seed default policies: {}", e)
+
+    if tag_rules_file:
+        rules_path = Path(tag_rules_file)
+        if not rules_path.exists():
+            rules_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                bundled_rules = pkg_files("nanobot") / "aegis" / "tag_rules.yaml"
+                rules_path.write_text(bundled_rules.read_text(encoding="utf-8"), encoding="utf-8")
+                logger.debug("Aegis: seeded default tag rules to {}", rules_path)
+            except Exception as e:
+                logger.debug("Aegis: could not seed default tag rules: {}", e)
+
+
 class AegisEnforcer:
     """Wraps AegisClient for nanobot's session/tool lifecycle."""
 
     def __init__(self, config: AegisConfig):
-        import os
-
         from aegis import AegisClient
         from aegis.config import AegisConfig as _AegisConfig
 
+        policy_dir = os.path.expanduser(config.policy_directory)
+        # Default tag_rules_file to ~/.nanobot/aegis/tag_rules.yaml if not set
+        tag_rules = os.path.expanduser(
+            config.tag_rules_file or str(Path(policy_dir).parent / "tag_rules.yaml")
+        )
+
+        init_aegis_defaults(policy_dir, tag_rules)
+
         aegis_cfg = _AegisConfig(
-            policy_directory=os.path.expanduser(config.policy_directory),
-            tag_rules_file=os.path.expanduser(config.tag_rules_file) if config.tag_rules_file else None,
+            policy_directory=policy_dir,
+            tag_rules_file=tag_rules,
             memory_store_type="file",
             memory_directory=os.path.expanduser(config.memory_directory),
             audit={"enabled": bool(config.audit_log), "log_file": os.path.expanduser(config.audit_log or "")},

@@ -1,0 +1,28 @@
+name: restrict_shell_exec
+description: Deny dangerous shell commands that could harm the system or exfiltrate data
+status: ACTIVE
+enforcement_points:
+  - PRE_CALL
+applies_to:
+  - exec_shell
+
+rules:
+  - name: allow_trusted_session
+    condition: "ctx.session.purpose_tags.any_of(['admin', 'trusted'])"
+    verdict: ALLOW
+    reason: "Trusted sessions may run any shell command"
+
+  - name: deny_recursive_delete
+    condition: "ctx.tool.args.command.contains('rm -rf')"
+    verdict: DENY
+    reason: "Recursive delete commands are not allowed"
+
+  - name: deny_disk_wipe
+    condition: "ctx.tool.args.command.contains('dd if=') OR ctx.tool.args.command.contains('mkfs')"
+    verdict: DENY
+    reason: "Disk wipe commands are not allowed"
+
+  - name: deny_fork_bomb
+    condition: "ctx.tool.args.command.contains(':(){ :|:& };:')"
+    verdict: DENY
+    reason: "Fork bombs are not allowed"

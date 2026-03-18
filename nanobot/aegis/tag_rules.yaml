@@ -1,0 +1,55 @@
+rules:
+  # Credential and secret file access
+  - name: detect_dotenv_file
+    tool_pattern: "read_file"
+    arg_pattern: ".env"
+    tags:
+      - credentials
+      - secrets
+
+  - name: detect_dotenv_local
+    tool_pattern: "read_file"
+    arg_pattern: ".env.local"
+    tags:
+      - credentials
+      - secrets
+
+  - name: detect_config_secrets
+    tool_pattern: "read_file"
+    arg_pattern: "secrets"
+    tags:
+      - secrets
+
+  # Private key detection in results
+  - name: detect_private_key_in_result
+    result_pattern: "BEGIN.*PRIVATE KEY"
+    tags:
+      - credentials
+      - pii
+
+  - name: detect_api_key_in_result
+    result_pattern: "api[_-]?key"
+    tags:
+      - credentials
+
+  # SSH key files
+  - name: detect_ssh_key_file
+    tool_pattern: "read_file"
+    arg_pattern: ".ssh"
+    tags:
+      - credentials
+      - pii
+
+  # Shell execution tracking
+  - name: track_shell_exec
+    tool_pattern: "exec_shell"
+    tags:
+      - shell_exec
+
+  # Credential files written
+  - name: detect_credential_write
+    tool_pattern: "write_file"
+    arg_pattern: ".env"
+    tags:
+      - credentials
+      - secrets
