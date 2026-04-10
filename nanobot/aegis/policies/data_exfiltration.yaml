@@ -35,6 +35,19 @@ dsl: |
     reason: "Audit and trusted sessions may send messages after sensitive data access"
   }
 
+  // Allowlist for web_fetch: add trusted domains using starts_with or matches.
+  // Only web_fetch passes a "url" arg pre-call; send_message/web_search are unaffected.
+  // Example: ctx.tool.args.url.starts_with("https://internal.corp.example.com")
+  //       OR ctx.tool.args.url.matches("https://api\\.trusted\\.example\\.com/.*")
+  rule "allow_trusted_web_fetch" {
+    ctx.tool.args.url.starts_with("https://www.linkedin.com")
+    OR ctx.tool.args.url.starts_with("https://linkedin.com")
+    OR ctx.tool.args.url.starts_with("https://www.google.com")
+    OR ctx.tool.args.url.starts_with("https://google.com")
+    => ALLOW
+    reason: "URL is on the trusted allowlist"
+  }
+
   rule "deny_messaging_after_credentials" {
     ctx.session.tags.any_of(["credentials", "secrets"])
     => DENY

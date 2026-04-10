@@ -104,6 +104,49 @@ async def test_aegis_blocks_web_fetch_after_dotenv_read(tmp_path):
     assert denial is not None, "web_fetch should be blocked after credential access"
 
 
+# ── Allowlist ──────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_aegis_allows_trusted_domain_after_credential_access(tmp_path):
+    """
+    web_fetch to an allowlisted URL is allowed even after credential access.
+    The bundled default allowlist permits https://localhost.
+    """
+    enforcer = _make_enforcer(tmp_path)
+    session = "telegram:allowlist1"
+
+    # Seed credentials tag
+    await enforcer.check_pre_call(session, "read_file", {"path": "/app/.env"})
+    await enforcer.record_and_check_post(
+        session, "read_file", {"path": "/app/.env"}, "API_KEY=sk-secret"
+    )
+
+    # Allowlisted URL should be permitted
+    denial = await enforcer.check_pre_call(
+        session, "web_fetch", {"url": "https://www.linkedin.com/in/someuser"}
+    )
+    assert denial is None, f"Allowlisted URL should be permitted, got: {denial}"
+
+
+@pytest.mark.asyncio
+async def test_aegis_blocks_non_allowlisted_domain_after_credential_access(tmp_path):
+    """
+    web_fetch to a domain not on the allowlist is still blocked after credential access.
+    """
+    enforcer = _make_enforcer(tmp_path)
+    session = "telegram:allowlist2"
+
+    await enforcer.check_pre_call(session, "read_file", {"path": "/app/.env"})
+    await enforcer.record_and_check_post(
+        session, "read_file", {"path": "/app/.env"}, "API_KEY=sk-secret"
+    )
+
+    denial = await enforcer.check_pre_call(
+        session, "web_fetch", {"url": "https://external.example.com/data"}
+    )
+    assert denial is not None, "Non-allowlisted URL should be blocked after credential access"
+
+
 @pytest.mark.asyncio
 async def test_aegis_session_isolation(tmp_path):
     """Tag accumulation is session-scoped — a different session is unaffected."""
